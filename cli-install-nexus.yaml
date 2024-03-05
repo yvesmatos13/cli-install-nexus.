@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cicd-devtools
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nexus-pvc
+  namespace: cicd-devtools
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  name: nexus3
+  namespace: cicd-devtools
+spec:
+  replicas: 1
+  selector:
+    app: nexus3
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: nexus3
+    spec:
+      containers:
+      - name: nexus3
+        image: docker.io/sonatype/nexus3:latest
+        ports:
+        - containerPort: 8081
+        resources:
+          limits:
+            memory: 4Gi
+            cpu: 2
+          requests:
+            memory: 2Gi
+            cpu: 500m
+        livenessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 60
+          exec:
+            command:
+            - echo
+            - ok
+        readinessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 60
+          httpGet:
+            path: /
+            port: 8081
+        volumeMounts:
+        - name: nexus3-volume-1
+          mountPath: /nexus-data/
+      volumes:
+      - name: nexus3-volume-1
+        persistentVolumeClaim:
+          claimName: nexus-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexus3
+  namespace: cicd-devtools
+spec:
+  ports:
+  - name: 8081-tcp
+    port: 8081
+    protocol: TCP
+    targetPort: 8081
+  selector:
+    app: nexus3
+
+---
+
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: nexus3
+  namespace: cicd-devtools
+spec:
+  to:
+    kind: Service
+    name: nexus3
